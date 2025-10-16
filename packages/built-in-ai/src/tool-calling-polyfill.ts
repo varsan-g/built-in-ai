@@ -123,18 +123,14 @@ export function buildToolSystemPrompt(
 
   return `${baseSystemPrompt}
 
-You have access to tools. To call a tool, respond with ONLY this JSON:
-{"tool_calls": [{"name": "TOOL_NAME", "input": {PARAMS}}]}
+You are a helpful assistant. You have access to the following tools.
+To use a tool, respond with a JSON object with a 'tool_calls' key, like this:
+{"tool_calls": [{"name": "tool_name", "arguments": {"arg1": "value1", "arg2": "value2"}}]}
 
 Available tools:
 ${toolDescriptions}
 
-Examples:
-{"tool_calls": [{"name": "getWeather", "input": {"location": "New York"}}]}
-{"tool_calls": [{"name": "getCurrentTime", "input": {}}]}
-{"tool_calls": [{"name": "getCurrentTime", "input": {}}, {"name": "getWeather", "input": {"location": "Paris"}}]}
-
-After receiving tool results, provide a natural response using that information.`;
+When you need to use a tool, respond ONLY with the JSON tool call request. After receiving the tool results, provide your final answer to the user.`
 }
 
 /**
