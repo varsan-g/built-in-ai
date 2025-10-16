@@ -16,8 +16,6 @@ import { convertToBuiltInAIMessages } from "./convert-to-built-in-ai-messages";
 import {
   buildToolSystemPrompt,
   parseToolCallRequest,
-  executeToolCalls,
-  formatToolResults,
 } from "./tool-calling-polyfill";
 
 export type BuiltInAIChatModelId = "text";
@@ -343,13 +341,10 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
     warnings: LanguageModelV2CallWarning[]
   ) {
     const { tools = [] } = options;
-    const maxSteps = 10; // Maximum tool calling iterations
-    const allToolCalls: LanguageModelV2ToolCall[] = [];
-    const allToolResults: any[] = [];
 
     // Filter to only function tools (provider-defined tools not supported in beta)
     const functionTools = tools.filter(
-      (tool): tool is LanguageModelV2FunctionTool & { execute?: (args: any) => Promise<any> } =>
+      (tool): tool is LanguageModelV2FunctionTool =>
         tool.type === 'function'
     );
 
@@ -362,70 +357,43 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
       toolSystemPrompt,
     );
 
-    let currentMessages = [...messages];
-    let finalText = "";
-    let stepCount = 0;
+    const text = await session.prompt(messages, promptOptions);
+    const parsedToolCall = parseToolCallRequest(text);
 
-    while (stepCount < maxSteps) {
-      stepCount++;
-
-      const text = await session.prompt(currentMessages, promptOptions);
-      const parsedToolCall = parseToolCallRequest(text);
-
-      if (!parsedToolCall) {
-        // No tool call detected - this is the final response
-        finalText = text;
-        break;
-      }
-
-      // Tool calls detected
-      const { toolCalls } = parsedToolCall;
-      allToolCalls.push(...toolCalls);
-
-      // Add assistant message with tool calls to conversation
-      currentMessages.push({
-        role: "assistant",
-        content: text,
-      } as LanguageModelMessage);
-
-      // Execute tools
-      const toolResults = await executeToolCalls(toolCalls, functionTools);
-      allToolResults.push(...toolResults);
-
-      // Add tool results to conversation
-      const toolResultsMessage = formatToolResults(toolResults);
-      currentMessages.push({
-        role: "user",
-        content: toolResultsMessage,
-      } as LanguageModelMessage);
-    }
-
-    if (stepCount >= maxSteps && !finalText) {
-      throw new Error(
-        `Tool calling loop exceeded maximum iterations (${maxSteps}). This may indicate a problem with the model or tool configuration.`
-      );
-    }
-
-    // Build response content with tool calls
+    // Build response content
     const content: LanguageModelV2Content[] = [];
 
-    // Add tool calls to content
-    for (const toolCall of allToolCalls) {
-      content.push({
-        type: "tool-call",
-        toolCallId: toolCall.toolCallId,
-        toolName: toolCall.toolName,
-        input: toolCall.input,
-      });
+    if (parsedToolCall) {
+      // Tool calls detected - return them for AI SDK to execute
+      const { toolCalls } = parsedToolCall;
+
+      for (const toolCall of toolCalls) {
+        content.push({
+          type: "tool-call",
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          input: toolCall.input,
+        });
+      }
+
+      return {
+        content,
+        finishReason: "tool-calls" as LanguageModelV2FinishReason,
+        usage: {
+          inputTokens: undefined,
+          outputTokens: undefined,
+          totalTokens: undefined,
+        },
+        request: { body: { messages, options: promptOptions } },
+        warnings,
+      };
     }
 
-    // Add final text if present
-    if (finalText) {
-      content.push({
-        type: "text",
-        text: finalText,
-      });
-    }
+    // No tool call detected - return the text response
+    content.push({
+      type: "text",
+      text,
+    });
 
     return {
       content,
@@ -435,10 +403,8 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
         outputTokens: undefined,
         totalTokens: undefined,
       },
-      request: { body: { messages: currentMessages, options: promptOptions } },
+      request: { body: { messages, options: promptOptions } },
       warnings,
-      toolCalls: allToolCalls,
-      toolResults: allToolResults,
     };
   }
 
@@ -599,20 +565,12 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
     warnings: LanguageModelV2CallWarning[]
   ) {
     const { tools = [] } = options;
-    const maxSteps = 10;
 
     // Filter to only function tools (provider-defined tools not supported in beta)
     const functionTools = tools.filter(
-      (tool): tool is LanguageModelV2FunctionTool & { execute?: (args: any) => Promise<any> } =>
+      (tool): tool is LanguageModelV2FunctionTool =>
         tool.type === 'function'
     );
-
-    // Log to debug tool structure
-    console.log('[doStreamWithTools] Tools received:', functionTools.map(t => ({
-      name: t.name,
-      hasExecute: !!(t as any).execute,
-      keys: Object.keys(t)
-    })));
 
     // Build tool-enhanced system prompt
     const toolSystemPrompt = buildToolSystemPrompt(functionTools, systemMessage);
@@ -628,7 +586,7 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
       signal: options.abortSignal,
     };
 
-    // Create a readable stream that handles the tool-calling loop
+    // Create a readable stream that handles tool call detection
     const stream = new ReadableStream<LanguageModelV2StreamPart>({
       async start(controller) {
         try {
@@ -637,86 +595,52 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
             warnings,
           });
 
-          let currentMessages = [...messages];
-          let stepCount = 0;
-          const allToolCalls: LanguageModelV2ToolCall[] = [];
-          const allToolResults: any[] = [];
+          let response = "";
+          const promptStream = session.promptStreaming(messages, streamOptions);
+          const reader = promptStream.getReader();
 
-          // Tool-calling loop
-          while (stepCount < maxSteps) {
-            stepCount++;
-
-            let response = "";
-            const promptStream = session.promptStreaming(currentMessages, streamOptions);
-            const reader = promptStream.getReader();
-
-            // Collect the full response from the stream
-            // Note: We need to buffer the full response to detect tool calls
-            // This is a limitation of the polyfill approach
-            try {
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                response += value;
-              }
-            } finally {
-              reader.releaseLock();
+          // LIMITATION: We must buffer the complete response before emitting anything.
+          // This is because the polyfill needs to parse the full response to determine
+          // if it's a tool call (JSON) or regular text. Real streaming isn't possible
+          // until native tool calling support is added to the Prompt API.
+          // 
+          // This means users won't see token-by-token streaming when tools are enabled.
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              response += value;
             }
+          } finally {
+            reader.releaseLock();
+          }
 
-            const parsedToolCall = parseToolCallRequest(response);
+          const parsedToolCall = parseToolCallRequest(response);
 
-            if (!parsedToolCall) {
-              // No tool call detected - stream the final response
-              const textId = "text-0";
+          if (!parsedToolCall) {
+            // No tool call detected - stream the final response
+            const textId = "text-0";
 
-              controller.enqueue({
-                type: "text-start",
-                id: textId,
-              });
+            controller.enqueue({
+              type: "text-start",
+              id: textId,
+            });
 
-              // Stream the final text
-              controller.enqueue({
-                type: "text-delta",
-                id: textId,
-                delta: response,
-              });
+            // Stream the final text
+            controller.enqueue({
+              type: "text-delta",
+              id: textId,
+              delta: response,
+            });
 
-              controller.enqueue({
-                type: "text-end",
-                id: textId,
-              });
+            controller.enqueue({
+              type: "text-end",
+              id: textId,
+            });
 
-              controller.enqueue({
-                type: "finish",
-                finishReason: "stop" as LanguageModelV2FinishReason,
-                usage: {
-                  inputTokens: session.inputUsage,
-                  outputTokens: undefined,
-                  totalTokens: undefined,
-                },
-              });
-
-              controller.close();
-              return;
-            }
-
-            // Tool calls detected - emit them and let client-side handle execution
-            const { toolCalls } = parsedToolCall;
-
-            // Emit tool call events for client-side execution
-            for (const toolCall of toolCalls) {
-              controller.enqueue({
-                type: "tool-call",
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                input: toolCall.input,
-              });
-            }
-
-            // Finish the stream - tool results will come from client via addToolResult
             controller.enqueue({
               type: "finish",
-              finishReason: "tool-calls" as LanguageModelV2FinishReason,
+              finishReason: "stop" as LanguageModelV2FinishReason,
               usage: {
                 inputTokens: session.inputUsage,
                 outputTokens: undefined,
@@ -728,12 +652,30 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
             return;
           }
 
-          // If we've exceeded max iterations, throw an error
-          controller.error(
-            new Error(
-              `Tool calling loop exceeded maximum iterations (${maxSteps}). This may indicate a problem with the model or tool configuration.`
-            )
-          );
+          // Tool calls detected - emit them for AI SDK to execute
+          const { toolCalls } = parsedToolCall;
+
+          for (const toolCall of toolCalls) {
+            controller.enqueue({
+              type: "tool-call",
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              input: toolCall.input,
+            });
+          }
+
+          // Finish the stream - AI SDK will handle execution and re-submission
+          controller.enqueue({
+            type: "finish",
+            finishReason: "tool-calls" as LanguageModelV2FinishReason,
+            usage: {
+              inputTokens: session.inputUsage,
+              outputTokens: undefined,
+              totalTokens: undefined,
+            },
+          });
+
+          controller.close();
         } catch (error) {
           controller.error(error);
         }
