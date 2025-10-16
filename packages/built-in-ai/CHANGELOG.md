@@ -1,5 +1,11 @@
 # @built-in-ai/core
 
+## 2.1.0-beta.2
+
+### Patch Changes
+
+- fix
+
 ## 2.1.0-beta.1
 
 ### Patch Changes

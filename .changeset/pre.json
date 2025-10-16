@@ -8,6 +8,7 @@
     "@built-in-ai/web-llm": "0.2.2"
   },
   "changesets": [
+    "eight-wombats-search",
     "eighty-pugs-battle",
     "weak-gifts-sing"
   ]
