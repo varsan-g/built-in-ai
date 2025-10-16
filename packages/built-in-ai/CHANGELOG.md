@@ -1,5 +1,11 @@
 # @built-in-ai/core
 
+## 2.1.0-beta.3
+
+### Patch Changes
+
+- fix prompt
+
 ## 2.1.0-beta.2
 
 ### Patch Changes
