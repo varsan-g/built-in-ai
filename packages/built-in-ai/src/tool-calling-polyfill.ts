@@ -125,7 +125,7 @@ export function buildToolSystemPrompt(
 
 You are a helpful assistant. You have access to the following tools.
 To use a tool, respond with a JSON object with a 'tool_calls' key, like this:
-{"tool_calls": [{"name": "tool_name", "arguments": {"arg1": "value1", "arg2": "value2"}}]}
+{"tool_calls": [{"name": "tool_name", "input": {"arg1": "value1", "arg2": "value2"}}]}
 
 Available tools:
 ${toolDescriptions}
