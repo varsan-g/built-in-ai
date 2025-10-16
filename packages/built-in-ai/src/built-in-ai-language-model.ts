@@ -8,8 +8,17 @@ import {
   LanguageModelV2StreamPart,
   LoadSettingError,
   JSONValue,
+  LanguageModelV2Message,
+  LanguageModelV2FunctionTool,
+  LanguageModelV2ToolCall,
 } from "@ai-sdk/provider";
 import { convertToBuiltInAIMessages } from "./convert-to-built-in-ai-messages";
+import {
+  buildToolSystemPrompt,
+  parseToolCallRequest,
+  executeToolCalls,
+  formatToolResults,
+} from "./tool-calling-polyfill";
 
 export type BuiltInAIChatModelId = "text";
 
@@ -180,14 +189,7 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
   }: Parameters<LanguageModelV2["doGenerate"]>[0]) {
     const warnings: LanguageModelV2CallWarning[] = [];
 
-    // Add warnings for unsupported settings
-    if (tools && tools.length > 0) {
-      warnings.push({
-        type: "unsupported-setting",
-        setting: "tools",
-        details: "Tool calling is not yet supported by Prompt API",
-      });
-    }
+    // Tool calling is now enabled by default - no warnings needed
 
     if (maxOutputTokens != null) {
       warnings.push({
@@ -286,6 +288,21 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
     const { systemMessage, messages, warnings, promptOptions, expectedInputs } =
       converted;
 
+    const { tools = [] } = options;
+
+    // If tools are provided, use tool calling flow (enabled by default)
+    if (tools.length > 0) {
+      return this.doGenerateWithTools(
+        options,
+        systemMessage,
+        messages,
+        promptOptions,
+        expectedInputs,
+        warnings
+      );
+    }
+
+    // Standard generation without tools
     const session = await this.getSession(
       undefined,
       expectedInputs,
@@ -311,6 +328,117 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
       },
       request: { body: { messages, options: promptOptions } },
       warnings,
+    };
+  }
+
+  /**
+   * Generate with tool calling support (polyfill implementation)
+   */
+  private async doGenerateWithTools(
+    options: LanguageModelV2CallOptions,
+    systemMessage: string | undefined,
+    messages: LanguageModelMessage[],
+    promptOptions: LanguageModelPromptOptions & LanguageModelCreateCoreOptions,
+    expectedInputs: Array<{ type: "text" | "image" | "audio" }> | undefined,
+    warnings: LanguageModelV2CallWarning[]
+  ) {
+    const { tools = [] } = options;
+    const maxSteps = 10; // Maximum tool calling iterations
+    const allToolCalls: LanguageModelV2ToolCall[] = [];
+    const allToolResults: any[] = [];
+
+    // Filter to only function tools (provider-defined tools not supported in beta)
+    const functionTools = tools.filter(
+      (tool): tool is LanguageModelV2FunctionTool & { execute?: (args: any) => Promise<any> } =>
+        tool.type === 'function'
+    );
+
+    // Build tool-enhanced system prompt
+    const toolSystemPrompt = buildToolSystemPrompt(functionTools, systemMessage);
+
+    const session = await this.getSession(
+      undefined,
+      expectedInputs,
+      toolSystemPrompt,
+    );
+
+    let currentMessages = [...messages];
+    let finalText = "";
+    let stepCount = 0;
+
+    while (stepCount < maxSteps) {
+      stepCount++;
+
+      const text = await session.prompt(currentMessages, promptOptions);
+      const parsedToolCall = parseToolCallRequest(text);
+
+      if (!parsedToolCall) {
+        // No tool call detected - this is the final response
+        finalText = text;
+        break;
+      }
+
+      // Tool calls detected
+      const { toolCalls } = parsedToolCall;
+      allToolCalls.push(...toolCalls);
+
+      // Add assistant message with tool calls to conversation
+      currentMessages.push({
+        role: "assistant",
+        content: text,
+      } as LanguageModelMessage);
+
+      // Execute tools
+      const toolResults = await executeToolCalls(toolCalls, functionTools);
+      allToolResults.push(...toolResults);
+
+      // Add tool results to conversation
+      const toolResultsMessage = formatToolResults(toolResults);
+      currentMessages.push({
+        role: "user",
+        content: toolResultsMessage,
+      } as LanguageModelMessage);
+    }
+
+    if (stepCount >= maxSteps && !finalText) {
+      throw new Error(
+        `Tool calling loop exceeded maximum iterations (${maxSteps}). This may indicate a problem with the model or tool configuration.`
+      );
+    }
+
+    // Build response content with tool calls
+    const content: LanguageModelV2Content[] = [];
+
+    // Add tool calls to content
+    for (const toolCall of allToolCalls) {
+      content.push({
+        type: "tool-call",
+        toolCallId: toolCall.toolCallId,
+        toolName: toolCall.toolName,
+        input: toolCall.input,
+      });
+    }
+
+    // Add final text if present
+    if (finalText) {
+      content.push({
+        type: "text",
+        text: finalText,
+      });
+    }
+
+    return {
+      content,
+      finishReason: "stop" as LanguageModelV2FinishReason,
+      usage: {
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      },
+      request: { body: { messages: currentMessages, options: promptOptions } },
+      warnings,
+      toolCalls: allToolCalls,
+      toolResults: allToolResults,
     };
   }
 
@@ -365,6 +493,21 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
       hasMultiModalInput,
     } = converted;
 
+    const { tools = [] } = options;
+
+    // If tools are provided, use tool calling flow (enabled by default)
+    if (tools.length > 0) {
+      return this.doStreamWithTools(
+        options,
+        systemMessage,
+        messages,
+        promptOptions,
+        expectedInputs,
+        warnings
+      );
+    }
+
+    // Standard streaming without tools
     const session = await this.getSession(
       undefined,
       expectedInputs,
@@ -437,6 +580,165 @@ export class BuiltInAIChatLanguageModel implements LanguageModelV2 {
         },
       }),
     );
+
+    return {
+      stream,
+      request: { body: { messages, options: promptOptions } },
+    };
+  }
+
+  /**
+   * Stream with tool calling support (polyfill implementation)
+   */
+  private async doStreamWithTools(
+    options: LanguageModelV2CallOptions,
+    systemMessage: string | undefined,
+    messages: LanguageModelMessage[],
+    promptOptions: LanguageModelPromptOptions & LanguageModelCreateCoreOptions,
+    expectedInputs: Array<{ type: "text" | "image" | "audio" }> | undefined,
+    warnings: LanguageModelV2CallWarning[]
+  ) {
+    const { tools = [] } = options;
+    const maxSteps = 10;
+
+    // Filter to only function tools (provider-defined tools not supported in beta)
+    const functionTools = tools.filter(
+      (tool): tool is LanguageModelV2FunctionTool & { execute?: (args: any) => Promise<any> } =>
+        tool.type === 'function'
+    );
+
+    // Log to debug tool structure
+    console.log('[doStreamWithTools] Tools received:', functionTools.map(t => ({
+      name: t.name,
+      hasExecute: !!(t as any).execute,
+      keys: Object.keys(t)
+    })));
+
+    // Build tool-enhanced system prompt
+    const toolSystemPrompt = buildToolSystemPrompt(functionTools, systemMessage);
+
+    const session = await this.getSession(
+      undefined,
+      expectedInputs,
+      toolSystemPrompt,
+    );
+
+    const streamOptions = {
+      ...promptOptions,
+      signal: options.abortSignal,
+    };
+
+    // Create a readable stream that handles the tool-calling loop
+    const stream = new ReadableStream<LanguageModelV2StreamPart>({
+      async start(controller) {
+        try {
+          controller.enqueue({
+            type: "stream-start",
+            warnings,
+          });
+
+          let currentMessages = [...messages];
+          let stepCount = 0;
+          const allToolCalls: LanguageModelV2ToolCall[] = [];
+          const allToolResults: any[] = [];
+
+          // Tool-calling loop
+          while (stepCount < maxSteps) {
+            stepCount++;
+
+            let response = "";
+            const promptStream = session.promptStreaming(currentMessages, streamOptions);
+            const reader = promptStream.getReader();
+
+            // Collect the full response from the stream
+            // Note: We need to buffer the full response to detect tool calls
+            // This is a limitation of the polyfill approach
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                response += value;
+              }
+            } finally {
+              reader.releaseLock();
+            }
+
+            const parsedToolCall = parseToolCallRequest(response);
+
+            if (!parsedToolCall) {
+              // No tool call detected - stream the final response
+              const textId = "text-0";
+
+              controller.enqueue({
+                type: "text-start",
+                id: textId,
+              });
+
+              // Stream the final text
+              controller.enqueue({
+                type: "text-delta",
+                id: textId,
+                delta: response,
+              });
+
+              controller.enqueue({
+                type: "text-end",
+                id: textId,
+              });
+
+              controller.enqueue({
+                type: "finish",
+                finishReason: "stop" as LanguageModelV2FinishReason,
+                usage: {
+                  inputTokens: session.inputUsage,
+                  outputTokens: undefined,
+                  totalTokens: undefined,
+                },
+              });
+
+              controller.close();
+              return;
+            }
+
+            // Tool calls detected - emit them and let client-side handle execution
+            const { toolCalls } = parsedToolCall;
+
+            // Emit tool call events for client-side execution
+            for (const toolCall of toolCalls) {
+              controller.enqueue({
+                type: "tool-call",
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                input: toolCall.input,
+              });
+            }
+
+            // Finish the stream - tool results will come from client via addToolResult
+            controller.enqueue({
+              type: "finish",
+              finishReason: "tool-calls" as LanguageModelV2FinishReason,
+              usage: {
+                inputTokens: session.inputUsage,
+                outputTokens: undefined,
+                totalTokens: undefined,
+              },
+            });
+
+            controller.close();
+            return;
+          }
+
+          // If we've exceeded max iterations, throw an error
+          controller.error(
+            new Error(
+              `Tool calling loop exceeded maximum iterations (${maxSteps}). This may indicate a problem with the model or tool configuration.`
+            )
+          );
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+    });
 
     return {
       stream,

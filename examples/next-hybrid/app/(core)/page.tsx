@@ -35,7 +35,7 @@ import {
 import { useState, useEffect, useRef } from "react";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { doesBrowserSupportBuiltInAI } from "@built-in-ai/core";
-import { DefaultChatTransport, UIMessage } from "ai";
+import { DefaultChatTransport, UIMessage, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { toast } from "sonner";
 import { BuiltInAIUIMessage } from "@built-in-ai/core";
 import Image from "next/image";
@@ -45,6 +45,7 @@ import { Kbd, KbdKey } from "@/components/ui/kbd";
 import { ModelSelector } from "@/components/model-selector";
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import Link from "next/link";
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 
 const doesBrowserSupportModel = doesBrowserSupportBuiltInAI();
 
@@ -64,13 +65,13 @@ export default function Chat() {
     setBrowserSupportsModel(doesBrowserSupportBuiltInAI());
   }, []);
 
-  const { error, status, sendMessage, messages, regenerate, stop } =
+  const { error, status, sendMessage, messages, regenerate, stop, addToolResult } =
     useChat<BuiltInAIUIMessage>({
       transport: doesBrowserSupportModel
         ? new ClientSideChatTransport()
         : new DefaultChatTransport<UIMessage>({
-            api: "/api/chat",
-          }),
+          api: "/api/chat",
+        }),
       onError(error) {
         toast.error(error.message);
       },
@@ -85,6 +86,41 @@ export default function Chat() {
           } else {
             toast.info(dataPart.data.message);
           }
+        }
+      },
+      // Automatically send when all tool results are available
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+      // Handle client-side tool execution
+      async onToolCall({ toolCall }) {
+        // Check if it's a dynamic tool first for proper type narrowing
+        if (toolCall.dynamic) {
+          return;
+        }
+
+        if (toolCall.toolName === 'getWeather') {
+          const temperature = Math.round(Math.random() * (90 - 32) + 32);
+          const input = toolCall.input as { location: string };
+          // No await - avoids potential deadlocks
+          addToolResult({
+            tool: 'getWeather',
+            toolCallId: toolCall.toolCallId,
+            output: {
+              location: input.location,
+              temperature,
+              conditions: 'Partly cloudy',
+            },
+          });
+        }
+
+        if (toolCall.toolName === 'getCurrentTime') {
+          addToolResult({
+            tool: 'getCurrentTime',
+            toolCallId: toolCall.toolCallId,
+            output: {
+              time: new Date().toLocaleTimeString(),
+              date: new Date().toLocaleDateString(),
+            },
+          });
         }
       },
       experimental_throttle: 150,
@@ -249,6 +285,33 @@ export default function Chat() {
                     }
 
                     // TODO: Handle other file types
+                    return null;
+                  })}
+
+                {/* Handle tool parts */}
+                {m.parts
+                  .filter((part) => part.type.startsWith("tool-"))
+                  .map((part, partIndex) => {
+                    if (part.type === "tool-getWeather" || part.type === "tool-getCurrentTime") {
+                      return (
+                        <Tool key={partIndex}>
+                          <ToolHeader type={part.type} state={part.state} />
+                          <ToolContent>
+                            {part.input !== undefined && <ToolInput input={part.input} />}
+                            {(part.output || part.errorText) && (
+                              <ToolOutput
+                                output={
+                                  part.output
+                                    ? JSON.stringify(part.output, null, 2)
+                                    : undefined
+                                }
+                                errorText={part.errorText}
+                              />
+                            )}
+                          </ToolContent>
+                        </Tool>
+                      );
+                    }
                     return null;
                   })}
 

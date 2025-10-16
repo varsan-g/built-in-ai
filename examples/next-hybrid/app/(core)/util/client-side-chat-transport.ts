@@ -5,8 +5,10 @@ import {
   convertToModelMessages,
   ChatRequestOptions,
   createUIMessageStream,
+  tool,
 } from "ai";
 import { builtInAI, BuiltInAIUIMessage } from "@built-in-ai/core";
+import { z } from "zod";
 
 /**
  * Client-side chat transport AI SDK implementation that handles AI model communication
@@ -15,8 +17,7 @@ import { builtInAI, BuiltInAIUIMessage } from "@built-in-ai/core";
  * @implements {ChatTransport<BuiltInAIUIMessage>}
  */
 export class ClientSideChatTransport
-  implements ChatTransport<BuiltInAIUIMessage>
-{
+  implements ChatTransport<BuiltInAIUIMessage> {
   async sendMessages(
     options: {
       chatId: string;
@@ -33,6 +34,20 @@ export class ClientSideChatTransport
     const prompt = convertToModelMessages(messages);
     const model = builtInAI();
 
+    // Define tools for testing (client-side tools without execute - handled in page.tsx)
+    const tools = {
+      getWeather: tool({
+        description: "Get the weather in a location (fahrenheit)",
+        inputSchema: z.object({
+          location: z.string().describe("The location to get the weather for"),
+        }),
+      }),
+      getCurrentTime: tool({
+        description: "Get the current time",
+        inputSchema: z.object({}),
+      }),
+    };
+
     // Check if model is already available to skip progress tracking
     const availability = await model.availability();
     if (availability === "available") {
@@ -40,6 +55,7 @@ export class ClientSideChatTransport
         model,
         messages: prompt,
         abortSignal: abortSignal,
+        tools,
       });
       return result.toUIMessageStream();
     }
@@ -99,11 +115,12 @@ export class ClientSideChatTransport
             });
           });
 
-          // Stream the actual text response
+          // Stream the actual text response  
           const result = streamText({
             model,
             messages: prompt,
             abortSignal: abortSignal,
+            tools,
             onChunk(event) {
               // Clear progress message on first text chunk
               if (event.chunk.type === "text-delta" && downloadProgressId) {

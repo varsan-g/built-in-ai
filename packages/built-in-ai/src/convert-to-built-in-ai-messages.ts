@@ -118,6 +118,7 @@ export function convertToBuiltInAIMessages(
 
       case "assistant": {
         let text = "";
+        const toolCalls: any[] = [];
 
         for (const part of message.content) {
           switch (part.type) {
@@ -126,11 +127,21 @@ export function convertToBuiltInAIMessages(
               break;
             }
             case "tool-call": {
-              throw new UnsupportedFunctionalityError({
-                functionality: "tool calls",
+              // For beta tool calling support, we convert tool calls to JSON format
+              toolCalls.push({
+                id: part.toolCallId,
+                name: part.toolName,
+                input: typeof part.input === 'string' ? JSON.parse(part.input) : part.input,
               });
+              break;
             }
           }
+        }
+
+        // If there are tool calls, format them as JSON (polyfill approach)
+        if (toolCalls.length > 0) {
+          const toolCallJson = JSON.stringify({ tool_calls: toolCalls });
+          text = toolCallJson;
         }
 
         messages.push({
@@ -141,9 +152,25 @@ export function convertToBuiltInAIMessages(
       }
 
       case "tool": {
-        throw new UnsupportedFunctionalityError({
-          functionality: "tool messages",
+        // Convert tool results to a format the model can understand
+        const toolResults = message.content.map((part) => {
+          if (part.type === "tool-result") {
+            // Handle both old format (result) and new format (output)
+            const output = (part as any).output || (part as any).result;
+            const outputStr =
+              typeof output === "string"
+                ? output
+                : JSON.stringify(output);
+            return `Tool: ${part.toolName} (ID: ${part.toolCallId})\nResult: ${outputStr}`;
+          }
+          return "";
         });
+
+        messages.push({
+          role: "user",
+          content: `Tool results:\n${toolResults.join("\n\n")}`,
+        } as LanguageModelMessage);
+        break;
       }
 
       default: {
