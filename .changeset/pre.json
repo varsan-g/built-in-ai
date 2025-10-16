@@ -1,0 +1,13 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@example/next-hybrid": "0.0.0",
+    "@built-in-ai/core": "2.0.0",
+    "@built-in-ai/transformers-js": "0.2.0",
+    "@built-in-ai/web-llm": "0.2.2"
+  },
+  "changesets": [
+    "eighty-pugs-battle"
+  ]
+}

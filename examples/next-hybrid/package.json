@@ -1,6 +1,6 @@
 {
   "name": "@example/next-hybrid",
-  "version": "0.0.0",
+  "version": "0.0.1-beta.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,7 +12,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.0",
     "@ai-sdk/react": "^2.0.12",
-    "@built-in-ai/core": "*",
+    "@built-in-ai/core": "2.1.0-beta.0",
     "@built-in-ai/transformers-js": "*",
     "@built-in-ai/web-llm": "*",
     "@icons-pack/react-simple-icons": "^13.7.0",

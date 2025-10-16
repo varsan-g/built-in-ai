@@ -1,5 +1,11 @@
 # @built-in-ai/core
 
+## 2.1.0-beta.0
+
+### Minor Changes
+
+- Add tool calling beta features with a polyfill while we wait for the Prompt API tool call implementation
+
 ## 2.0.0
 
 ### Major Changes
