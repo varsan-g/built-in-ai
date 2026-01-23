@@ -26,7 +26,7 @@ export function BrowserSupportInstructions() {
           <div>
             <h3 className="text-sm font-medium mb-2">You need:</h3>
             <ul className="text-xs text-muted-foreground space-y-1 ml-4">
-              <li>• Chrome (v. 128 or higher)</li>
+              <li>• Chrome (v. 138 or higher)</li>
               <li>• Edge Dev/Canary (v. 138.0.3309.2 or higher)</li>
             </ul>
           </div>
@@ -48,19 +48,24 @@ export function BrowserSupportInstructions() {
                   </code>
                 </li>
                 <li>
-                  2. Search for &apos;Prompt API for Gemini Nano with Multimodal
-                  Input&apos;
-                </li>
-                <li>3. Set it to Enabled</li>
-                <li>
-                  4. Go to{" "}
+                  2. Enable{" "}
                   <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                    chrome://components
+                    #optimization-guide-on-device-model
                   </code>
                 </li>
                 <li>
-                  5. Click Check for Update on Optimization Guide On Device
-                  Model
+                  3. Enable{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    #prompt-api-for-gemini-nano-multimodal-input
+                  </code>
+                </li>
+                <li>4. Click Relaunch</li>
+                <li>
+                  5. Go to{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    chrome://components/
+                  </code>{" "}
+                  and verify Optimization Guide On Device Model is Up-to-date
                 </li>
               </ul>
             </div>
@@ -77,6 +82,14 @@ export function BrowserSupportInstructions() {
                   </code>
                 </li>
                 <li>2. Set it to Enabled</li>
+                <li>3. Restart Edge</li>
+                <li>
+                  4. Go to{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    edge://on-device-internals
+                  </code>{" "}
+                  and verify Device performance class is High or greater
+                </li>
               </ul>
             </div>
           </div>

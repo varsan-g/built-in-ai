@@ -22,13 +22,12 @@ npm i @built-in-ai/core
 
 ### Chrome Setup
 
-1. Use Chrome version **128 or higher**
+1. Use Chrome version **138 or higher**
 2. Navigate to `chrome://flags/`
-3. Search for **"Prompt API for Gemini Nano with Multimodal Input"**
-4. Set it to **Enabled**
-5. Go to `chrome://components`
-6. Click **Check for Update** on **Optimization Guide On Device Model**
-7. Restart Chrome
+3. Enable **`#optimization-guide-on-device-model`**
+4. Enable **`#prompt-api-for-gemini-nano-multimodal-input`**
+5. Click **Relaunch**
+6. Go to `chrome://components/` and verify **Optimization Guide On Device Model** shows "Up-to-date" (the model download may take a few minutes)
 
 ### Edge Setup
 
@@ -36,6 +35,7 @@ npm i @built-in-ai/core
 2. Navigate to `edge://flags/#prompt-api-for-phi-mini`
 3. Set it to **Enabled**
 4. Restart Edge
+5. Go to `edge://on-device-internals` and verify **Device performance class** is "High" or greater
 
 For more information, check out [Chrome's official guide](https://developer.chrome.com/docs/extensions/ai/prompt-api).
 
