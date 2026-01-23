@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Built-in AI - Vanilla JS Example</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Built-in AI Chat</h1>
+
+      <div id="warning" class="warning" hidden>
+        <strong>Browser not supported.</strong>
+        <p>
+          This example requires Chrome with built-in AI enabled. See the
+          <a
+            href="https://www.built-in-ai.dev/docs/ai-sdk-v6/core/installation"
+            target="_blank"
+            >setup instructions</a
+          >.
+        </p>
+      </div>
+
+      <form id="chat-form">
+        <textarea
+          id="prompt"
+          name="prompt"
+          rows="3"
+          placeholder="Enter your prompt..."
+          required
+        ></textarea>
+        <button type="submit" id="submit-btn">Send</button>
+      </form>
+
+      <div id="output-container" hidden>
+        <h2>Response</h2>
+        <div id="output"></div>
+      </div>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
