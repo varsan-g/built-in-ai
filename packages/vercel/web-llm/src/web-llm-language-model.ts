@@ -38,12 +38,13 @@ import {
   extractSystemPrompt,
 } from "./utils/prompt-utils";
 import { ToolCallFenceDetector } from "./streaming/tool-call-detector";
+import {
+  isMobile,
+  checkWebGPU,
+  doesBrowserSupportWebLLM,
+} from "./utils/browser";
 
-declare global {
-  interface Navigator {
-    gpu?: GPU;
-  }
-}
+export { doesBrowserSupportWebLLM };
 
 export type WebLLMModelId = string;
 
@@ -67,29 +68,6 @@ export interface WebLLMSettings {
    * @default undefined
    */
   worker?: Worker;
-}
-
-function isMobile(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  );
-}
-
-function checkWebGPU(): boolean {
-  try {
-    return !!globalThis?.navigator?.gpu;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if the browser supports WebGPU (required for WebLLM).
- * @returns boolean - true if WebGPU API is available
- */
-export function doesBrowserSupportWebLLM(): boolean {
-  return checkWebGPU();
 }
 
 function extractToolName(content: string): string | null {

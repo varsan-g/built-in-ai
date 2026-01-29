@@ -3,6 +3,11 @@ import {
   WebLLMModelId,
   WebLLMSettings,
 } from "./web-llm-language-model";
+import {
+  WebLLMEmbeddingModel,
+  WebLLMEmbeddingModelId,
+  WebLLMEmbeddingSettings,
+} from "./web-llm-embedding-model";
 
 /**
  * Create a new WebLLMLanguageModel.
@@ -14,4 +19,16 @@ export function webLLM(
   settings?: WebLLMSettings,
 ): WebLLMLanguageModel {
   return new WebLLMLanguageModel(modelId, settings);
+}
+
+/**
+ * Create a new WebLLMEmbeddingModel.
+ * @param modelId The embedding model ID to use (e.g., 'snowflake-arctic-embed-m-q0f32-MLC-b32')
+ * @param settings Options for the embedding model
+ */
+export function webLLMEmbedding(
+  modelId: WebLLMEmbeddingModelId,
+  settings?: WebLLMEmbeddingSettings,
+): WebLLMEmbeddingModel {
+  return new WebLLMEmbeddingModel(modelId, settings);
 }
