@@ -10,6 +10,7 @@ description: Complete API documentation for @browser-ai/web-llm with AI SDK v6
 Creates a WebLLM model instance.
 
 **Parameters:**
+
 - `modelId`: The model identifier from the [supported list of models](https://github.com/mlc-ai/web-llm/blob/main/src/config.ts)
 - `settings` (optional): Configuration options
   - `appConfig?: AppConfig` - Custom app configuration for WebLLM
@@ -18,6 +19,33 @@ Creates a WebLLM model instance.
   - `worker?: Worker` - A web worker instance to run the model in for better performance
 
 **Returns:** `WebLLMLanguageModel`
+
+### `webLLMEmbedding(modelId, settings?)`
+
+Creates a WebLLM embedding model instance.
+
+**Parameters:**
+
+- `modelId`: The embedding model identifier
+- `settings` (optional): Configuration options
+  - `appConfig?: AppConfig` - Custom app configuration for WebLLM
+  - `initProgressCallback?: (progress: WebLLMProgress) => void` - Progress callback for model initialization
+  - `engineConfig?: MLCEngineConfig` - Engine configuration options
+  - `worker?: Worker` - A web worker instance to run the model in
+  - `maxEmbeddingsPerCall?: number` - Maximum texts per call (default: 100)
+
+**Returns:** `WebLLMEmbeddingModel`
+
+**Available Models:**
+
+| Model ID                                 | Size   | Batch |
+| ---------------------------------------- | ------ | ----- |
+| `snowflake-arctic-embed-m-q0f32-MLC-b32` | Medium | 32    |
+| `snowflake-arctic-embed-m-q0f32-MLC-b4`  | Medium | 4     |
+| `snowflake-arctic-embed-s-q0f32-MLC-b32` | Small  | 32    |
+| `snowflake-arctic-embed-s-q0f32-MLC-b4`  | Small  | 4     |
+
+See [WebLLM config](https://github.com/mlc-ai/web-llm/blob/main/src/config.ts) for the latest list of supported models.
 
 ---
 
@@ -39,17 +67,18 @@ Checks the current availability status of the WebLLM model.
 
 **Returns:** `Promise<"unavailable" | "downloadable" | "available">`
 
-| Status | Description |
-|--------|-------------|
-| `"unavailable"` | Model is not supported in the browser (no WebGPU) |
+| Status           | Description                                         |
+| ---------------- | --------------------------------------------------- |
+| `"unavailable"`  | Model is not supported in the browser (no WebGPU)   |
 | `"downloadable"` | Model is supported but needs to be downloaded first |
-| `"available"` | Model is ready to use |
+| `"available"`    | Model is ready to use                               |
 
 ### `WebLLMLanguageModel.createSessionWithProgress(onProgress?)`
 
 Creates a language model session with optional download progress monitoring.
 
 **Parameters:**
+
 - `onProgress?: (progress: WebLLMProgress) => void` - Optional callback that receives progress reports during model download
 
 **Returns:** `Promise<MLCEngineInterface>` - The configured language model session
@@ -132,4 +161,3 @@ interface WebLLMSettings {
   worker?: Worker;
 }
 ```
-
