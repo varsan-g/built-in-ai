@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { WebLLMEmbeddingModel, webLLMEmbedding } from "../src";
+import { WebLLMEmbeddingModel, webLLM } from "../src";
 
 const mockEmbeddingsCreate = vi.fn();
 const mockReload = vi.fn();
@@ -67,7 +67,7 @@ describe("WebLLMEmbeddingModel", () => {
     });
 
     it("should work with factory function", () => {
-      const model = webLLMEmbedding("test-model", {
+      const model = webLLM.embeddingModel("test-model", {
         maxEmbeddingsPerCall: 50,
       });
 

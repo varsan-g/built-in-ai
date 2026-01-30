@@ -229,9 +229,9 @@ Generate text embeddings for semantic search, RAG, and similarity matching.
 
 ```typescript
 import { embed } from "ai";
-import { webLLMEmbedding } from "@browser-ai/web-llm";
+import { webLLM } from "@browser-ai/web-llm";
 
-const model = webLLMEmbedding("snowflake-arctic-embed-m-q0f32-MLC-b32");
+const model = webLLM.embeddingModel("snowflake-arctic-embed-m-q0f32-MLC-b32");
 
 const { embedding } = await embed({
   model,
@@ -245,9 +245,9 @@ console.log(embedding); // [0.123, -0.456, ...]
 
 ```typescript
 import { embedMany } from "ai";
-import { webLLMEmbedding } from "@browser-ai/web-llm";
+import { webLLM } from "@browser-ai/web-llm";
 
-const model = webLLMEmbedding("snowflake-arctic-embed-m-q0f32-MLC-b32");
+const model = webLLM.embeddingModel("snowflake-arctic-embed-m-q0f32-MLC-b32");
 
 const { embeddings } = await embedMany({
   model,
@@ -259,9 +259,9 @@ const { embeddings } = await embedMany({
 
 ```typescript
 import { embed, cosineSimilarity } from "ai";
-import { webLLMEmbedding } from "@browser-ai/web-llm";
+import { webLLM } from "@browser-ai/web-llm";
 
-const model = webLLMEmbedding("snowflake-arctic-embed-m-q0f32-MLC-b32");
+const model = webLLM.embeddingModel("snowflake-arctic-embed-m-q0f32-MLC-b32");
 
 const { embedding: queryEmbedding } = await embed({
   model,
@@ -281,9 +281,9 @@ console.log(similarity); // 0.87
 
 ```typescript
 import { embed } from "ai";
-import { webLLMEmbedding } from "@browser-ai/web-llm";
+import { webLLM } from "@browser-ai/web-llm";
 
-const model = webLLMEmbedding("snowflake-arctic-embed-m-q0f32-MLC-b32");
+const model = webLLM.embeddingModel("snowflake-arctic-embed-m-q0f32-MLC-b32");
 
 if ((await model.availability()) === "downloadable") {
   await model.createSessionWithProgress((progress) => {

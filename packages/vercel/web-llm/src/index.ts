@@ -14,4 +14,5 @@ export type { WebLLMUIMessage, WebLLMProgress } from "./types";
 
 export { WebWorkerMLCEngineHandler } from "@mlc-ai/web-llm";
 
-export { webLLM, webLLMEmbedding } from "./web-llm-provider";
+export { webLLM, createWebLLM } from "./web-llm-provider";
+export type { WebLLMProvider } from "./web-llm-provider";
