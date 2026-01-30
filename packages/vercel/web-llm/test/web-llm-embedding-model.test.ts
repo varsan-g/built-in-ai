@@ -197,9 +197,9 @@ describe("WebLLMEmbeddingModel", () => {
         maxEmbeddingsPerCall: 2,
       });
 
-      await expect(
-        model.doEmbed({ values: ["a", "b", "c"] }),
-      ).rejects.toThrow("Too many values");
+      await expect(model.doEmbed({ values: ["a", "b", "c"] })).rejects.toThrow(
+        "Too many values",
+      );
     });
 
     it("should handle embedding API errors", async () => {
