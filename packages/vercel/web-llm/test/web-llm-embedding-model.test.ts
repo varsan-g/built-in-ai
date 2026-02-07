@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { CreateWebWorkerMLCEngine } from "@mlc-ai/web-llm";
 import { WebLLMEmbeddingModel, webLLM } from "../src";
 
 const mockEmbeddingsCreate = vi.fn();
@@ -235,6 +236,24 @@ describe("WebLLMEmbeddingModel", () => {
       await expect(model.doEmbed({ values: ["hello"] })).rejects.toThrow(
         "WebLLM embedding failed: API Error",
       );
+    });
+  });
+
+  describe("Worker Engine", () => {
+    it("should use CreateWebWorkerMLCEngine when worker is provided", async () => {
+      const mockWorker = {} as Worker;
+      const model = new WebLLMEmbeddingModel("test-model", {
+        worker: mockWorker,
+      });
+
+      await model.doEmbed({ values: ["hello"] });
+
+      expect(CreateWebWorkerMLCEngine).toHaveBeenCalledWith(
+        mockWorker,
+        "test-model",
+        expect.any(Object),
+      );
+      expect(mockReload).not.toHaveBeenCalled();
     });
   });
 
