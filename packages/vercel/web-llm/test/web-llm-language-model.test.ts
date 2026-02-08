@@ -726,4 +726,243 @@ describe("WebLLMLanguageModel", () => {
       expect(toolChoiceWarning).toBeDefined();
     });
   });
+
+  describe("structured output (native json mode)", () => {
+    it("should return json text and pass response_format without tool prompt", async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [
+          {
+            message: { content: '{"name":"Jakob","age":69}' },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 15,
+          completion_tokens: 10,
+          total_tokens: 25,
+        },
+      });
+
+      const model = new WebLLMLanguageModel("test-model");
+      const result = await model.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Give me a person object" }],
+          },
+        ],
+        responseFormat: {
+          type: "json",
+          schema: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              age: { type: "number" },
+            },
+          },
+        },
+      });
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe("text");
+      if (result.content[0].type === "text") {
+        expect(result.content[0].text).toBe('{"name":"Jakob","age":69}');
+      }
+      expect(result.finishReason).toMatchObject({
+        unified: "stop",
+        raw: "stop",
+      });
+
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      expect(callArgs.response_format).toMatchObject({
+        type: "json_object",
+      });
+      const messagesJson = JSON.stringify(callArgs.messages);
+      expect(messagesJson).not.toContain("Available Tools");
+    });
+
+    it("should preserve json containing fence-like patterns", async () => {
+      const jsonWithFencePattern =
+        '{"code":"```tool_call\\n{}\\n```","value":42}';
+
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [
+          {
+            message: { content: jsonWithFencePattern },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 15,
+          total_tokens: 25,
+        },
+      });
+
+      const model = new WebLLMLanguageModel("test-model");
+      const result = await model.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Return JSON with code" }],
+          },
+        ],
+        responseFormat: { type: "json" },
+      });
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe("text");
+      if (result.content[0].type === "text") {
+        expect(result.content[0].text).toBe(jsonWithFencePattern);
+      }
+
+      const toolCalls = result.content.filter((c) => c.type === "tool-call");
+      expect(toolCalls).toHaveLength(0);
+    });
+
+    it("should stream json text without fence detection", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async function* createJsonStream(): AsyncGenerator<any, void, unknown> {
+        yield {
+          choices: [{ delta: { content: '{"name"' } }],
+        };
+        yield {
+          choices: [{ delta: { content: ':"Jakob"}' } }],
+        };
+        yield {
+          choices: [
+            {
+              delta: {},
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+        };
+      }
+
+      mockChatCompletionsCreate.mockResolvedValue(createJsonStream());
+
+      const model = new WebLLMLanguageModel("test-model");
+      const { stream } = await model.doStream({
+        prompt: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Return a person" }],
+          },
+        ],
+        responseFormat: { type: "json" },
+      });
+
+      const parts = [];
+      const reader = stream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Collect text deltas
+      const textDeltas = parts.filter((p) => p.type === "text-delta");
+      const text = textDeltas.map((p) => (p as any).delta).join("");
+      expect(text).toBe('{"name":"Jakob"}');
+
+      const toolCall = parts.find((p) => p.type === "tool-call");
+      expect(toolCall).toBeUndefined();
+
+      const finish = parts.find((p) => p.type === "finish");
+      if (finish?.type === "finish") {
+        expect(finish.finishReason).toMatchObject({
+          unified: "stop",
+          raw: "stop",
+        });
+      }
+    });
+
+    it("should fall back to fence parsing when tools are present", async () => {
+      const toolCallResponse = `\`\`\`tool_call
+{"name": "get_weather", "arguments": {"city": "Copenhagen"}}
+\`\`\``;
+
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [
+          {
+            message: { content: toolCallResponse },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 40,
+          completion_tokens: 20,
+          total_tokens: 60,
+        },
+      });
+
+      const model = new WebLLMLanguageModel("test-model");
+      const result = await model.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Weather in Copenhagen?" }],
+          },
+        ],
+        responseFormat: { type: "json" },
+        tools: [
+          {
+            type: "function",
+            name: "get_weather",
+            description: "Get weather",
+            inputSchema: {
+              type: "object",
+              properties: { city: { type: "string" } },
+            },
+          },
+        ],
+      });
+
+      expect(result.finishReason).toMatchObject({
+        unified: "tool-calls",
+        raw: "tool-calls",
+      });
+      const toolCalls = result.content.filter((c) => c.type === "tool-call");
+      expect(toolCalls).toHaveLength(1);
+
+      if (toolCalls[0].type === "tool-call") {
+        expect(toolCalls[0].toolName).toBe("get_weather");
+      }
+    });
+
+    it("should omit schema key when responseFormat has no schema", async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [
+          {
+            message: { content: '{"ok":true}' },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 8,
+          completion_tokens: 4,
+          total_tokens: 12,
+        },
+      });
+
+      const model = new WebLLMLanguageModel("test-model");
+      await model.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Return JSON" }],
+          },
+        ],
+        responseFormat: { type: "json" },
+      });
+
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      expect(callArgs.response_format).toEqual({ type: "json_object" });
+    });
+  });
 });
